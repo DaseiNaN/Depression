@@ -129,6 +129,6 @@ dmypy.json
 .pyre/
 
 data/
-exps/
+exp/
 notebooks/
 resources/
