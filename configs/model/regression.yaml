@@ -1,0 +1,7 @@
+audio_net:
+  num_classes: 1
+  dropout: !!float 0.5
+  num_layers: 2
+  hidden_size: 256
+  embed_size: 256
+  bidirectional: True

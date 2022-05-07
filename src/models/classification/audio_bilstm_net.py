@@ -9,8 +9,7 @@ class AudioBiLSTMNet(nn.Module):
         dropout: float = 0.5,
         num_layers: int = 2,
         hidden_size: int = 256,
-        embed_size: int = 256,
-        bidirectional: bool = True,
+        embed_size: int = 256
     ):
         super(AudioBiLSTMNet, self).__init__()
 
