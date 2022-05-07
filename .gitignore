@@ -128,7 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# data/
-# logs/
-# notebooks/
-# resources/
+data/
+logs/
+notebooks/
+resources/
