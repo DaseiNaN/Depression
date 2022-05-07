@@ -15,7 +15,7 @@ sys.path.append(os.getcwd())
 import src.vendor.loupe_keras as lpk  # noqa: E402
 
 
-def main(data_dir: str, out_dir: str, ssds_threshold: int, cluster_size: int):
+def main(data_dir: str, out_dir: str, ssds_threshold: int, cluster_size: int, augment: bool):
     """Extract feats for audio.
 
     Args:
@@ -69,7 +69,7 @@ def main(data_dir: str, out_dir: str, ssds_threshold: int, cluster_size: int):
             item_type = item_path.split("/")[-1].replace("_out.wav", "")
             feat_dict[item_type] = vlad_feat
 
-        if target >= ssds_threshold:
+        if augment and target >= ssds_threshold:
             targets.extend([target] * 6)
             for k_perm in itertools.permutations(["positive", "neutral", "negative"]):
                 feats.append([feat_dict[k] for k in list(k_perm)])
@@ -109,6 +109,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-c", "--cluster_size", type=int, help="Cluster size for NetVLAD", default=16
+    )
+    parser.add_argument(
+        "-a", "--augment", type=bool, help="Data Augment, default=False", default=False
     )
 
     args = parser.parse_args()

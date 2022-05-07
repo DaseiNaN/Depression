@@ -12,7 +12,7 @@ from elmoformanylangs import Embedder
 logging.basicConfig(level=logging.ERROR)
 
 
-def main(data_dir: str, out_dir: str, ssds_threshold: int):
+def main(data_dir: str, out_dir: str, ssds_threshold: int, augment: bool):
     """Extract feats for audio.
 
     Args:
@@ -27,7 +27,7 @@ def main(data_dir: str, out_dir: str, ssds_threshold: int):
     Returns:
         None
     """
-    elmo = Embedder(os.path.join(os.getcwd(), "thirdparty/zhs.model"))
+    elmo = Embedder(os.path.join(os.getcwd(), "resources/zhs.model"))
 
     feats = []
     targets = []
@@ -52,7 +52,7 @@ def main(data_dir: str, out_dir: str, ssds_threshold: int):
             item_type = item_path.split("/")[-1].replace(".txt", "")
             answer_dict[item_type] = answer_sents
 
-        if target >= ssds_threshold:
+        if augment and target >= ssds_threshold:
             targets.extend([target] * 6)
             for k_perm in itertools.permutations(["positive", "neutral", "negative"]):
                 answers = [answer_dict[k] for k in list(k_perm)]
@@ -91,6 +91,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-t", "--ssds_threshold", type=int, help="Threshold for standard SDS score", default=53
+    )
+    parser.add_argument(
+        "-a", "--augment", type=bool, help="Data Augment, default=False", default=False
     )
 
     args = parser.parse_args()
