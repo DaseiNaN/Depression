@@ -19,5 +19,5 @@ if [ $stage -eq 0 ]; then
 fi
 
 if [ $stage -eq 1 ]; then
-    python train.py experiment=classification
+    python examples/cls_train.py
 fi
