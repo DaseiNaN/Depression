@@ -28,12 +28,15 @@ class TextBiLSTMNet(nn.Module):
             batch_first=True,
         )
 
-        self.linear_layer = nn.Sequential(
+        self.embed_layer = nn.Sequential(
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
             nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.Dropout(dropout)
+        )
+        
+        self.out_layer = nn.Sequential(
             nn.Linear(in_features=hidden_size, out_features=num_classes),
-            nn.Softmax(dim=1),
+            nn.Softmax(dim=1)
         )
 
     def attention_with_w(self, lstm_out, lstm_hidden):
@@ -53,12 +56,13 @@ class TextBiLSTMNet(nn.Module):
     def forward(self, x):
         x, (h, _) = self.lstm_layer(x)
         attn = self.attention_with_w(lstm_out=x, lstm_hidden=h.permute(1, 0, 2))
-        y = self.linear_layer(attn)
-        return y
+        embeds = self.embed_layer(attn)
+        y = self.out_layer(embeds)
+        return y, embeds
 
 
 if __name__ == "__main__":
     model = TextBiLSTMNet()
     x = torch.randn((10, 3, 1024))
-    y = model(x)
-    print(" input_size:{}\noutput_size:{}".format(x.shape, y.shape))
+    y, embeds = model(x)
+    print(" input_size:{}\noutput_size:{} {}".format(x.shape, y.shape, embeds.shape))

@@ -1,5 +1,8 @@
 import os
 import sys
+from cgitb import text
+
+from pyrsistent import l
 
 sys.path.append(os.getcwd())
 import logging
@@ -11,7 +14,9 @@ import torch.nn.functional as F
 from sklearn.model_selection import StratifiedKFold
 from src.datamodules.eatd_dataset import EATDDataset
 from src.models.classification.audio_bilstm_net import AudioBiLSTMNet
+from src.models.classification.fused_net import FusedNet
 from src.models.classification.text_bilstm_net import TextBiLSTMNet
+from src.utils.fused_loss import ClsFusedLoss
 from src.utils.metrics import measure_performance
 
 AUDIO_NET_CONFIG = {
@@ -29,6 +34,12 @@ TEXT_NET_CONFIG = {
     "hidden_size": 128,
     "embed_size": 1024,
     "bidirectional": True
+}
+
+FUSED_NET_CONFIG = {
+    "num_classes": 2,
+    "text_hidden_dim": 128,
+    "audio_hidden_dim": 256,
 }
 
 def set_logger(logger_name, data_type):
@@ -55,11 +66,13 @@ def set_config(data_type, batch_size, max_epochs):
         "seed": 308,
         "train_config": {
             "max_epochs": max_epochs,
-            "net": AUDIO_NET_CONFIG if data_type == "audio" else TEXT_NET_CONFIG,
+            "audio_net": AUDIO_NET_CONFIG,
+            "text_net": TEXT_NET_CONFIG,
+            "fused_net": FUSED_NET_CONFIG,
             "optimizer": {
-                "type": "adamw",
-                "lr": 6e-6, 
-                "weight_decay": 1e-5,                
+                "type": "adam",
+                "lr": 8e-6, 
+                "weight_decay": 0,
             }
         },
         "data_module": {
@@ -81,14 +94,18 @@ def set_data_module(config):
     return eatd_dataset, splits
     
 if __name__ == '__main__':
-    data_type = "text"
+    data_type = "fuse"
+    audio_ckp = os.path.join(os.getcwd(), "exp/cls/audio/model.fold1.ckp")
+    text_ckp = os.path.join(os.getcwd(), "exp/cls/text/model.fold0.ckp")
+    
     batch_size = 8
     max_epochs = 100
     device = "cuda:0"
-    logger = set_logger('cls', data_type)
+    logger = set_logger('fuse', data_type)
     config = set_config(data_type, batch_size, max_epochs)
     dataset, splits = set_data_module(config["data_module"])
     
+    loss_fn = ClsFusedLoss(pos=FUSED_NET_CONFIG['audio_hidden_dim'])
     fold_results = {}
     # Start print
     logger.info('--------------------------------')
@@ -106,33 +123,51 @@ if __name__ == '__main__':
         test_loader = torch.utils.data.DataLoader(dataset, batch_size=len(test_ids), sampler=test_subsampler)
         
         # Init the neural network model
-        if config["data_type"] == "audio":
-            model = AudioBiLSTMNet(**config["train_config"]["net"])
-        elif config["data_type"] == "text":
-            model = TextBiLSTMNet(**config["train_config"]["net"])
-        model = model.to(device)
+        audio_model = AudioBiLSTMNet(**config["train_config"]["audio_net"])
+        audio_model.load_state_dict(torch.load(audio_ckp))
+        audio_model = audio_model.to(device)
+        
+        text_model = TextBiLSTMNet(**config["train_config"]["text_net"])
+        text_model.load_state_dict(torch.load(text_ckp))
+        text_model = text_model.to(device)
+        
+        fused_model = FusedNet(**config["train_config"]["fused_net"])
+        fused_model = fused_model.to(device)
         
         # Init optimizer
         if config["train_config"]["optimizer"]["type"] == "adamw":
-            optimizer = torch.optim.AdamW(model.parameters(), lr=config["train_config"]["optimizer"]["lr"], weight_decay=config["train_config"]["optimizer"]["weight_decay"])
+            optimizer = torch.optim.AdamW(fused_model.parameters(), lr=config["train_config"]["optimizer"]["lr"], weight_decay=config["train_config"]["optimizer"]["weight_decay"])
+        elif config["train_config"]["optimizer"]["type"] == "adam":
+            optimizer = torch.optim.Adam(fused_model.parameters(), lr=config["train_config"]["optimizer"]["lr"],  weight_decay=config["train_config"]["optimizer"]["weight_decay"])
         
-        model.train()
+        audio_model.train()
+        for k, v in audio_model.named_parameters():
+            v.requires_grad = False
+        text_model.train()
+        for k, v in text_model.named_parameters():
+            v.requires_grad = False
+        fused_model.train()
         
         # Run the training loop for defined number of epochs
         for epoch in range(0, max_epochs):
             tot_acc = 0
             tot_loss = 0.0
             for i, data in enumerate(train_loader, 0):
-                y, _, y_true = data
-                y = y.to(device)
+                y_audio, y_text, _, y_true = data
+                y_audio = y_audio.to(device)
+                y_text = y_text.to(device)
                 y_true = y_true.to(device)
                 
+                _, y_embed_audio = audio_model(y_audio)
+                _, y_embed_text = text_model(y_text)
+                y = torch.cat((y_embed_audio, y_embed_text), dim=1)
+
                 optimizer.zero_grad()
-                y_pred, _ = model(y)
+                y_pred = fused_model(y)
                 y_tmp = y_pred.max(dim=1, keepdims=True)[1]
                 tot_acc += y_tmp.eq(y_true.view_as(y_tmp)).sum()
                 
-                loss = F.cross_entropy(y_pred, y_true.long())
+                loss = loss_fn(y_embed_audio, y_embed_text, y_true.long(), fused_model)
                 loss.backward()
                 optimizer.step()
                 
@@ -142,19 +177,27 @@ if __name__ == '__main__':
             
         logger.info('Training process has finished. Saving trained model.')
         ckp_path = os.path.join(os.getcwd(), f'exp/cls/{data_type}/model.fold{fold}.ckp')
-        torch.save(model.state_dict(), ckp_path)
+        torch.save(fused_model.state_dict(), ckp_path)
         
         # Evaluationfor this fold
         logger.info('Starting testing')
-        model.eval()
+        audio_model.eval()
+        text_model.eval()
+        fused_model.eval()
         with torch.no_grad():
             for i, data in enumerate(test_loader, 0):
-                y, _, y_true = data
-                y = y.to(device)
+                y_audio, y_text, _, y_true = data
+                y_audio = y_audio.to(device)
+                y_text = y_text.to(device)
                 y_true = y_true.to(device)
                 
-                y_pred, _ = model(y)
-                loss = F.cross_entropy(y_pred, y_true.long())
+                _, y_embed_audio = audio_model(y_audio)
+                _, y_embed_text = text_model(y_text)
+                
+                y = torch.cat((y_embed_audio, y_embed_text), dim=1)
+                
+                y_pred = fused_model(y)
+                loss = loss_fn(y_embed_audio, y_embed_text, y_true.long(), fused_model)
                 
                 confusion_matrix, [accuracy, precision, recall, f1_score] = measure_performance(y_pred, y_true)
                 

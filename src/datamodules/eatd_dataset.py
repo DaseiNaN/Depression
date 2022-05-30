@@ -18,6 +18,7 @@ class EATDDataset(Dataset):
             dep_idxs = audio_feats_pkg["dep_idxs"]
             self.audio_feats = audio_feats_pkg["feats"]
             self.text_feats = text_feats_pkg["feats"]
+            self.targets = audio_feats_pkg["targets"]
             self.y = np.zeros(shape=self.audio_feats.shape[0])
             self.y[dep_idxs] = 1
         else:

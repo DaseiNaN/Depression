@@ -26,11 +26,14 @@ class AudioBiLSTMNet(nn.Module):
             batch_first=True,
         )
 
-        self.linear_layer = nn.Sequential(
+        self.embed_layer = nn.Sequential(
             nn.Dropout(dropout),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
             nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.Dropout(dropout)
+        )
+        
+        self.out_layer = nn.Sequential(
             nn.Linear(in_features=hidden_size, out_features=num_classes),
             nn.Softmax(dim=1),
         )
@@ -39,13 +42,14 @@ class AudioBiLSTMNet(nn.Module):
         x = self.layer_norm(x)
         x, _ = self.gru_layer(x)
         x = x.mean(dim=1)
-        y = self.linear_layer(x)
-        return y
+        embeds = self.embed_layer(x)
+        y = self.out_layer(embeds)
+        return y, embeds
 
 
 if __name__ == "__main__":
     model = AudioBiLSTMNet()
     x = torch.randn((10, 3, 256))
-    y = model(x)
+    y, embeds = model(x)
 
-    print(" input_size:{}\noutput_size:{}".format(x.shape, y.shape))
+    print(" input_size:{}\noutput_size:{}, {}".format(x.shape, y.shape, embeds.shape))
