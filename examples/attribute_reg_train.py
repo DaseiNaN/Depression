@@ -18,6 +18,20 @@ from src.models.regression.audio_bilstm_net import AudioBiLSTMNet
 from src.models.regression.text_bilstm_net import TextBiLSTMNet
 from src.utils.metrics import measure_performance
 
+DATA_TYPE = 'audio'
+ATTRIBUTE='negative' # positive, neutral, negative
+
+print(f'data_type={DATA_TYPE}, attribute={ATTRIBUTE}')
+ATTRIBUTE_INDEX_DICT = {
+    'positive': 0,
+    'neutral': 1,
+    'negative': 2
+}
+
+ATTRIBUTE_INDEX = ATTRIBUTE_INDEX_DICT[ATTRIBUTE]
+
+
+
 AUDIO_NET_CONFIG = {
     "num_classes": 1,
     "dropout": 0.5,
@@ -41,7 +55,7 @@ def set_logger(logger_name, data_type):
     logger.setLevel(logging.DEBUG)
     
     if not logger.handlers:
-        file_handler = logging.FileHandler(filename=os.path.join(os.getcwd(), f'exp_wav2vec2/reg/{data_type}/log.txt'), encoding='utf-8')
+        file_handler = logging.FileHandler(filename=os.path.join(os.getcwd(), f'exp_wav2vec2/attribute/{ATTRIBUTE}/reg/{data_type}/log.txt'), encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
         
         stream_handler = logging.StreamHandler()
@@ -69,7 +83,7 @@ def set_config(data_type, batch_size, max_epochs):
         "data_module": {
             "num_folds": 3,
             "data_type": data_type,
-            "data_dir": os.path.join(os.getcwd(), "data/EATD-Feats/augment_wav2vec2"),
+            "data_dir": os.path.join(os.getcwd(), "data/EATD-Feats/origin_wav2vec2"),
             "batch_size": batch_size
         }
     }
@@ -85,7 +99,7 @@ def set_data_module(config):
     return eatd_dataset, splits
     
 if __name__ == '__main__':
-    data_type = "audio"
+    data_type = DATA_TYPE
     batch_size = 8
     max_epochs = 300
     device = "cpu"
@@ -132,6 +146,8 @@ if __name__ == '__main__':
             tot_loss = 0.0
             for i, data in enumerate(train_loader, 0):
                 y, y_true, _ = data
+                y = y[:, ATTRIBUTE_INDEX, :]
+                y = y.unsqueeze(1)
                 y = y.to(device)
                 y_true = y_true.to(device)
                 
@@ -148,7 +164,7 @@ if __name__ == '__main__':
             mae = mean_absolute_error(tot_y_true, tot_y_pred)
             rmse = np.sqrt(mean_squared_error(tot_y_true, tot_y_pred))
             if mae <= best_mae and rmse <= best_rmse:
-                ckp_path = os.path.join(os.getcwd(), f'exp_wav2vec2/reg/{data_type}/fold{fold}/model.fold{fold}.epoch{epoch}.ckp')
+                ckp_path = os.path.join(os.getcwd(), f'exp_wav2vec2/attribute/{ATTRIBUTE}/reg/{data_type}/fold{fold}/model.fold{fold}.epoch{epoch}.ckp')
                 torch.save(model.state_dict(), ckp_path)
                 best_mae = min(mae, best_mae)
                 best_rmse = min(rmse, best_rmse)
@@ -157,17 +173,19 @@ if __name__ == '__main__':
                   .format(epoch+1, tot_loss, best_mae, best_rmse, best_epoch))
 
         # logger.info('Training process has finished. Saving trained model.')
-        # ckp_path = os.path.join(os.getcwd(), f'exp/reg/{data_type}/model.fold{fold}.ckp')
+        # ckp_path = os.path.join(os.getcwd(), f'exp/attribute/{ATTRIBUTE}/reg/{data_type}/model.fold{fold}.ckp')
         # torch.save(model.state_dict(), ckp_path)
         
         # Evaluationfor this fold
         logger.info('Starting testing')
-        best_ckp = os.path.join(os.getcwd(), f'exp_wav2vec2/reg/{data_type}/fold{fold}/model.fold{fold}.epoch{best_epoch}.ckp')
+        best_ckp = os.path.join(os.getcwd(), f'exp_wav2vec2/attribute/{ATTRIBUTE}/reg/{data_type}/fold{fold}/model.fold{fold}.epoch{best_epoch}.ckp')
         model.load_state_dict(torch.load(best_ckp))
         model.eval()
         with torch.no_grad():
             for i, data in enumerate(test_loader, 0):
                 y, y_true, _ = data
+                y = y[:, ATTRIBUTE_INDEX, :]
+                y = y.unsqueeze(1)
                 y = y.to(device)
                 y_true = y_true.to(device)
                 

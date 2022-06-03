@@ -132,3 +132,4 @@ data/
 exp/
 notebooks/
 resources/
+exp_wav2vec2/

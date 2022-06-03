@@ -131,8 +131,8 @@ class NetVLAD(layers.Layer):
         tf.matmul might still work when the dim of A is (?,64), but this is too confusing.
         Just follow the above rules.
         """
-        activation = K.dot(reshaped_input, self.cluster_weights)
 
+        activation = K.dot(reshaped_input, self.cluster_weights)
         activation += self.cluster_biases
 
         activation = tf.nn.softmax(activation)

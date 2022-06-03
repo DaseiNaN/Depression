@@ -49,7 +49,7 @@ def set_logger(logger_name, data_type):
     logger.setLevel(logging.DEBUG)
     
     if not logger.handlers:
-        file_handler = logging.FileHandler(filename=os.path.join(os.getcwd(), f'exp/reg/{data_type}/log.txt'), encoding='utf-8')
+        file_handler = logging.FileHandler(filename=os.path.join(os.getcwd(), f'exp_wav2vec2/reg/{data_type}/log.txt'), encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
         
         stream_handler = logging.StreamHandler()
@@ -79,7 +79,7 @@ def set_config(data_type, batch_size, max_epochs):
         "data_module": {
             "num_folds": 3,
             "data_type": data_type,
-            "data_dir": os.path.join(os.getcwd(), "data/EATD-Feats/augment"),
+            "data_dir": os.path.join(os.getcwd(), "data/EATD-Feats/augment_wav2vec2"),
             "batch_size": batch_size
         }
     }
@@ -96,11 +96,11 @@ def set_data_module(config):
     
 if __name__ == '__main__':
     data_type = "fuse"
-    audio_ckp = os.path.join(os.getcwd(), "exp/reg/audio/model.fold2.ckp")
-    text_ckp = os.path.join(os.getcwd(), "exp/reg/text/model.fold2.ckp")
+    audio_ckp = os.path.join(os.getcwd(), "/home/dasein/Projects/Depression/exp_wav2vec2/reg/audio/fold0/model.fold0.epoch297.ckp")
+    text_ckp = os.path.join(os.getcwd(), "/home/dasein/Projects/Depression/exp/reg/text/fold1/model.fold1.epoch276.ckp")
     
     batch_size = 8
-    max_epochs = 200
+    max_epochs = 300
     device = "cpu"
     logger = set_logger('reg', data_type)
     config = set_config(data_type, batch_size, max_epochs)
@@ -148,6 +148,8 @@ if __name__ == '__main__':
             v.requires_grad = False
         fused_model.train()
         
+        best_mae, best_rmse = float('inf'), float('inf')
+        best_epoch = -1
         # Run the training loop for defined number of epochs
         for epoch in range(0, max_epochs):
             tot_y_pred = np.array([])
@@ -174,17 +176,25 @@ if __name__ == '__main__':
                 tot_loss += loss.item()
             mae = mean_absolute_error(tot_y_true, tot_y_pred)
             rmse = np.sqrt(mean_squared_error(tot_y_true, tot_y_pred))
-            logger.debug("Training epoch:{:3d}\t loss:{:.6f}\t mae:{:.4f}\t rmse:{:.4f}"
-                  .format(epoch+1, tot_loss, mae, rmse))
+            if mae <= best_mae and rmse <= best_rmse:
+                ckp_path = os.path.join(os.getcwd(), f'exp_wav2vec2/reg/{data_type}/fold{fold}/model.fold{fold}.epoch{epoch}.ckp')
+                torch.save(fused_model.state_dict(), ckp_path)
+                best_mae = min(mae, best_mae)
+                best_rmse = min(rmse, best_rmse)
+                best_epoch = epoch
+            logger.debug("Training epoch:{:3d}\t loss:{:.6f}\t best_mae:{:.4f}\t best_rmse:{:.4f} best_epoch:{:3d}"
+                  .format(epoch+1, tot_loss, best_mae, best_rmse, best_epoch))
 
-        logger.info('Training process has finished. Saving trained model.')
-        ckp_path = os.path.join(os.getcwd(), f'exp/reg/{data_type}/model.fold{fold}.ckp')
-        torch.save(fused_model.state_dict(), ckp_path)
+        # logger.info('Training process has finished. Saving trained model.')
+        # ckp_path = os.path.join(os.getcwd(), f'exp_wav2vec2/reg/{data_type}/model.fold{fold}.ckp')
+        # torch.save(fused_model.state_dict(), ckp_path)
         
         # Evaluationfor this fold
         logger.info('Starting testing')
+        best_ckp = os.path.join(os.getcwd(), f'exp_wav2vec2/reg/{data_type}/fold{fold}/model.fold{fold}.epoch{best_epoch}.ckp')
         audio_model.eval()
         text_model.eval()
+        fused_model.load_state_dict(torch.load(best_ckp))
         fused_model.eval()
         
         with torch.no_grad():
@@ -207,6 +217,7 @@ if __name__ == '__main__':
                 logger.info(f"======== Fold{fold}-Summary =========")
                 logger.info("MAE : {:.4f}".format(mae))
                 logger.info("RMSE: {:.4f}".format(rmse))
+                logger.info("Best checkpoint: {}".format(best_ckp))
                 logger.info("================================")
                 fold_results[fold] = [mae, rmse]
     # Print fold results

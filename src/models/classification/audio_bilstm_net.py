@@ -49,7 +49,7 @@ class AudioBiLSTMNet(nn.Module):
 
 if __name__ == "__main__":
     model = AudioBiLSTMNet()
-    x = torch.randn((10, 3, 256))
+    x = torch.randn((10, 1, 256))
     y, embeds = model(x)
 
     print(" input_size:{}\noutput_size:{}, {}".format(x.shape, y.shape, embeds.shape))

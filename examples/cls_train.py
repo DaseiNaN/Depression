@@ -37,7 +37,7 @@ def set_logger(logger_name, data_type):
     logger.setLevel(logging.DEBUG)
     
     if not logger.handlers:
-        file_handler = logging.FileHandler(filename=os.path.join(os.getcwd(), f'exp/cls/{data_type}/log.txt'), encoding='utf-8')
+        file_handler = logging.FileHandler(filename=os.path.join(os.getcwd(), f'exp_wav2vec2/cls/{data_type}/log.txt'), encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
         
         stream_handler = logging.StreamHandler()
@@ -65,7 +65,7 @@ def set_config(data_type, batch_size, max_epochs):
         "data_module": {
             "num_folds": 3,
             "data_type": data_type,
-            "data_dir": os.path.join(os.getcwd(), "data/EATD-Feats/augment"),
+            "data_dir": os.path.join(os.getcwd(), "data/EATD-Feats/augment_wav2vec2"),
             "batch_size": batch_size
         }
     }
@@ -81,9 +81,9 @@ def set_data_module(config):
     return eatd_dataset, splits
     
 if __name__ == '__main__':
-    data_type = "text"
+    data_type = "audio"
     batch_size = 8
-    max_epochs = 100
+    max_epochs = 150
     device = "cuda:0"
     logger = set_logger('cls', data_type)
     config = set_config(data_type, batch_size, max_epochs)
@@ -141,7 +141,7 @@ if __name__ == '__main__':
                   .format(epoch+1, tot_loss, tot_acc, len(train_ids), float(tot_acc)/len(train_ids)))
             
         logger.info('Training process has finished. Saving trained model.')
-        ckp_path = os.path.join(os.getcwd(), f'exp/cls/{data_type}/model.fold{fold}.ckp')
+        ckp_path = os.path.join(os.getcwd(), f'exp_wav2vec2/cls/{data_type}/model.fold{fold}.ckp')
         torch.save(model.state_dict(), ckp_path)
         
         # Evaluationfor this fold
